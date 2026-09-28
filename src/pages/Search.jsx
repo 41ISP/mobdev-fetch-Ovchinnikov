@@ -11,7 +11,8 @@ const Search = () => {
     const [textField, setTextField] = useState(query)
 
     const [books, setBooks] = useState([])
-const [isLoading, setIsLoading] = useState(false)
+    const [isLoading, setIsLoading] = useState(false)
+    const [error, setError] = useState(false);
 
     const handleSubmit = (e) => {
         e.preventDefault()
@@ -19,18 +20,60 @@ const [isLoading, setIsLoading] = useState(false)
         navigate('/search?q=' + encodeURIComponent(textField.trim()))
     }
 
+    // Обновление счетчика найденных книг
+    useEffect(() => {
+        const countElement = document.getElementById('resultCount');
+        if (countElement) {
+            if (isLoading) {
+                countElement.textContent = '...';
+            } else if (error) {
+                countElement.textContent = '—';
+            } else {
+                countElement.textContent = books.length + ' найдено';
+            }
+        }
+    }, [books, isLoading, error]);
 
     useEffect(() => {
         const loadBooks = async () => {
-            setIsLoading(true)
-            const res = await fetch("https://openlibrary.org/search.json" + "?q=" + query + "&limit=10")
-            const data = await res.json()
-            console.log(data)
-            setBooks(data.docs);
-            setIsLoading(false)
+            if (!query) {
+                setBooks([]);
+                setIsLoading(false);
+                return;
+            }
+            try {
+                setIsLoading(true)
+                setError(false)
+                const res = await fetch("https://openlibrary.org/search.json" + "?q=" + encodeURIComponent(query) + "&limit=10")
+                if (!res.ok) {
+                    const data = res.json();
+                    throw new Error(data.detail[0].msg || `HTTP error! status: ${res.status}`);
+                }
+                const data = await res.json()
+                
+              
+                const docsArray = Array.isArray(data.docs) ? data.docs : [];
+                setBooks(docsArray);
+            } catch (err) {
+                console.error(err);
+                setError(err.message);
+                setBooks([]);
+            } finally {
+                setIsLoading(false)
+            }
         }
         loadBooks()
     }, [query])
+
+    const renderNoResultsMessage = () => {
+        if (error) {
+            return <div className="no-results-message">Ошибка при загрузке данных</div>;
+        }
+        if (!isLoading && books && books.length === 0 && query) {
+            return <div className="no-results-message">книги не найдены</div>;
+        }
+        return null;
+    };
 
     return (
         <section className="content">
@@ -58,12 +101,14 @@ const [isLoading, setIsLoading] = useState(false)
                     —
                 </span>
             </div>
-            {isLoading && <Loader/>}
-            {!isLoading && books && books.length > 0 ? (
-                <div className="book-grid" id="results" >
-                    {books.map((el, i) => (<BookCard {...el} key={i} />))}
+            {isLoading && <Loader />}
+            {!isLoading && !error && books && books.length > 0 ? (
+                <div className="book-grid" id="results">
+                    {books.map((el, i) => (<BookCard {...el} book_key= {el.key} />))}
                 </div>
-            ) : ("книги не найдены")}
+            ) : (
+                renderNoResultsMessage()
+            )}
         </section>
     )
 }
